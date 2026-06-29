@@ -1,0 +1,50 @@
+# --- Binary & Executables ---
+# Hasil kompilasi Go (bisa berbeda tergantung OS)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+
+# Jika Anda melakukan build dengan nama file spesifik, masukkan di sini.
+# Contoh jika hasil build ditaruh di folder bin/
+/bin/
+
+# --- Dependencies & Vendor ---
+# Direkomendasikan untuk di-ignore jika menggunakan Go Modules (kecuali Anda sengaja pakai vendoring)
+vendor/
+
+# --- Development Tools & Scratchpad ---
+# Folder coret-coret / eksperimen lokal
+/scratch/
+/scratchpad/
+*.local
+
+# --- IDE & Editors ---
+# JetBrains (GoLand, IntelliJ, dll)
+.idea/
+*.iwb
+*.iws
+
+# Visual Studio Code
+.vscode/
+!.vscode/extensions.json
+
+# Vim & Emacs
+*~
+*.swp
+*.swo
+.DS_Store
+
+# --- Environment Variables & Secrets ---
+# JANGAN PERNAH men-commit file credential ke Git
+.env
+.env.local
+.env.*.local
+
+# --- Logs & Coverages ---
+*.log
+*.out
+coverage.txt
