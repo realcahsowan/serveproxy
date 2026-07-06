@@ -33,6 +33,7 @@ type ProjectType string
 const (
 	TypeLaravel ProjectType = "Laravel"
 	TypePHP     ProjectType = "PHP Built-in"
+	TypeStatic  ProjectType = "Static"
 )
 
 // Project holds metadata about scanned directories
@@ -411,6 +412,19 @@ func scanProjects(projectsDir string, phpVersions map[string]string, defaultVers
 				startPort++
 				continue
 			}
+
+			// 4. Static HTML: has dist/index.html
+			buildIndexPath := filepath.Join(dirPath, "dist/index.html")
+			if _, err := os.Stat(buildIndexPath); err == nil {
+				projs = append(projs, Project{
+					Name:   file.Name(),
+					Port:   0,
+					Status: "OFF",
+					Type:   TypeStatic,
+					Path:   dirPath,
+				})
+				continue
+			}
 		}
 	}
 
@@ -645,6 +659,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			p := &m.projects[m.cursor]
+			if p.Type == TypeStatic {
+				if p.Status == "OFF" {
+					p.Status = "RUNNING"
+				} else {
+					p.Status = "OFF"
+				}
+				saveNginxMap(m.projects)
+				break
+			}
 			if p.Status == "OFF" {
 				phpBin := resolvePHPBinary(p.PHPVersion, m.phpPath)
 				var runCmd *exec.Cmd
@@ -758,18 +781,24 @@ func (m model) viewMain() string {
 			}
 
 			phpVerStr := "-"
-			if p.PHPVersion != "" {
-				phpVerStr = p.PHPVersion
-			} else if m.defaultPHPVersion != "" {
-				phpVerStr = m.defaultPHPVersion + " *"
+			if p.Type != TypeStatic {
+				if p.PHPVersion != "" {
+					phpVerStr = p.PHPVersion
+				} else if m.defaultPHPVersion != "" {
+					phpVerStr = m.defaultPHPVersion + " *"
+				}
 			}
 
+			portStr := strconv.Itoa(p.Port)
+			if p.Type == TypeStatic {
+				portStr = "-"
+			}
 			t.Row(
 				cursorStr,
 				p.Name,
 				string(p.Type),
 				phpVerStr,
-				strconv.Itoa(p.Port),
+				portStr,
 				statusStr,
 				urlStr,
 			)
@@ -968,18 +997,42 @@ func main() {
 }
 
 func saveNginxMap(projects []Project) {
-	file, err := os.Create("/etc/nginx/tui_ports.map")
+	mapFile, err := os.Create("/etc/nginx/tui_ports.map")
 	if err != nil {
 		return
 	}
-	defer file.Close()
 
 	for _, p := range projects {
-		if p.Status == "RUNNING" {
-			fmt.Fprintf(file, "    %s.test %d;\n", p.Name, p.Port)
-			fmt.Fprintf(file, "    *.%s.test %d;\n", p.Name, p.Port)
+		if p.Status == "RUNNING" && p.Type != TypeStatic {
+			fmt.Fprintf(mapFile, "    %s.test %d;\n", p.Name, p.Port)
+			fmt.Fprintf(mapFile, "    *.%s.test %d;\n", p.Name, p.Port)
 		}
 	}
+	mapFile.Close()
+
+	staticFile, err := os.Create("/etc/nginx/tui_static.conf")
+	if err != nil {
+		_ = exec.Command("nginx", "-s", "reload").Run()
+		return
+	}
+
+	for _, p := range projects {
+		if p.Status == "RUNNING" && p.Type == TypeStatic {
+			buildPath := filepath.Join(p.Path, "dist")
+			fmt.Fprintf(staticFile, "server {\n")
+			fmt.Fprintf(staticFile, "    listen 80;\n")
+			fmt.Fprintf(staticFile, "    server_name %s.test;\n", p.Name)
+			fmt.Fprintf(staticFile, "    root %s;\n", buildPath)
+			fmt.Fprintf(staticFile, "    index index.html;\n")
+			fmt.Fprintf(staticFile, "\n")
+			fmt.Fprintf(staticFile, "    location / {\n")
+			fmt.Fprintf(staticFile, "        try_files $uri $uri/ /index.html;\n")
+			fmt.Fprintf(staticFile, "    }\n")
+			fmt.Fprintf(staticFile, "}\n")
+			fmt.Fprintf(staticFile, "\n")
+		}
+	}
+	staticFile.Close()
 
 	_ = exec.Command("nginx", "-s", "reload").Run()
 }
