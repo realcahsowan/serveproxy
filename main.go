@@ -1004,8 +1004,8 @@ func saveNginxMap(projects []Project) {
 
 	for _, p := range projects {
 		if p.Status == "RUNNING" && p.Type != TypeStatic {
-			fmt.Fprintf(mapFile, "    %s.test %d;\n", p.Name, p.Port)
-			fmt.Fprintf(mapFile, "    *.%s.test %d;\n", p.Name, p.Port)
+			fmt.Fprintf(mapFile, "%s.test %d;\n", p.Name, p.Port)
+			fmt.Fprintf(mapFile, "*.%s.test %d;\n", p.Name, p.Port)
 		}
 	}
 	mapFile.Close()

@@ -42,7 +42,7 @@ sudo systemctl restart dnsmasq
 ```
 
 ### 2. Konfigurasi Nginx Dynamic Map
-Buat berkas konfigurasi virtual host wildcard baru di `/etc/nginx/sites-available/serveproxy`:
+Buat berkas konfigurasi virtual host wildcard baru di `/etc/nginx/sites-available/tui-wildcard`:
 ```nginx
 map $host $backend_port {
     hostnames;
@@ -67,19 +67,38 @@ server {
 
 Aktifkan konfigurasi virtual host tersebut dan siapkan file peta port:
 ```bash
-sudo ln -s /etc/nginx/sites-available/serveproxy /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/tui-wildcard /etc/nginx/sites-enabled/
 sudo touch /etc/nginx/tui_ports.map
 sudo chmod 666 /etc/nginx/tui_ports.map
 sudo systemctl restart nginx
 ```
 
-### 3. Izin Reload Nginx Tanpa Sudo
+> [!WARNING]
+> Jika Anda menggunakan Nginx versi 1.28+, pastikan tidak ada *leading whitespace* (spasi/tab di awal baris) di dalam file `/etc/nginx/tui_ports.map`. Nginx versi terbaru tidak mentolerir whitespace pada file yang di-include ke dalam blok `map`. ServeProxy (versi terbaru) sudah menulis file map tanpa leading whitespace secara otomatis.
+
+### 3. Wildcard Domain & Static Files
+
+#### Wildcard Domain (`.test`)
+ServeProxy menggunakan kombinasi **Dnsmasq** dan **Nginx** untuk menangani semua domain berakhiran `.test` secara wildcard:
+
+1. **Dnsmasq** — Konfigurasi `address=/.test/127.0.0.1` mengarahkan **semua** domain `.test` ke `127.0.0.1`. Tidak perlu mendaftarkan domain project satu per satu.
+2. **Nginx** — Blok `server_name *.test` menangkap seluruh request ke domain `.test` secara wildcard.
+3. **Nginx Map** — File `/etc/nginx/tui_ports.map` memetakan host (misal: `laravel-app.test`) ke port backend (misal: `8001`). File ini ditulis otomatis oleh ServeProxy saat project diaktifkan/dinonaktifkan.
+
+Dengan pendekatan ini, project baru cukup ditambahkan ke ServeProxy dan langsung dapat diakses tanpa perubahan konfigurasi DNS/Nginx manual.
+
+#### Static Files Serving
+- **Laravel Projects:** `php artisan serve` menangani file statis (CSS, JS, gambar) dari folder `public/`. Route tidak ditemukan akan diarahkan ke `index.php` (fallback routing Laravel).
+- **PHP Built-in:** Server `php -S` melayani file statis langsung dari document root. Jika file statis tidak ditemukan, server menjalankan `index.php` atau `public/index.php` sebagai router.
+- **Catatan:** Semua request tetap melalui Nginx reverse proxy (`http://127.0.0.1:$backend_port`), sehingga static files tetap dilayani oleh PHP server di belakang proxy.
+
+### 4. Izin Reload Nginx Tanpa Sudo
 Agar ServeProxy dapat memerintahkan Nginx memuat ulang peta port secara otomatis tanpa meminta password root/sudo, jalankan:
 ```bash
 sudo chmod u+s /usr/sbin/nginx
 ```
 
-### 4. Instalasi Multi-Version PHP (Opsional)
+### 5. Instalasi Multi-Version PHP (Opsional)
 Untuk menggunakan fitur multi PHP version per project, Anda perlu menginstal beberapa versi PHP ke path yang berbeda. php.new menyediakan beberapa versi PHP dari CDN mereka:
 
 ```bash
@@ -183,6 +202,14 @@ ServeProxy menentukan versi PHP untuk setiap project dengan urutan prioritas ber
 * **Penyebab:** Konfigurasi DNS/Nginx belum reload atau alamat IP binding bermasalah.
 * **Solusi:** ServeProxy telah menggunakan IP binding default `127.0.0.1` (bukan `localhost`) untuk PHP built-in server agar kompatibel penuh dengan Nginx. Pastikan status file `/etc/nginx/tui_ports.map` terisi dan dapat ditulis (`chmod 666`).
 
-### 2. Browser Mengarahkan ke Google Search / HTTPS
+### 2. Error "500 Internal Server Error" — Invalid Port di Nginx (Nginx ≥ 1.28)
+* **Penyebab:** File `/etc/nginx/tui_ports.map` memiliki leading whitespace di setiap baris entry-nya. Nginx 1.28+ tidak lagi mentolerir whitespace pada file yang di-include ke dalam blok `map`.
+* **Solusi:** Pastikan isi file map tidak memiliki spasi/tab di awal baris:
+  ```bash
+  sudo sed -i 's/^[[:space:]]*//' /etc/nginx/tui_ports.map && sudo systemctl reload nginx
+  ```
+  Jika Anda menggunakan ServeProxy versi terbaru, aplikasi sudah menulis file map tanpa leading whitespace secara otomatis. Cukup restart serveproxy.
+
+### 3. Browser Mengarahkan ke Google Search / HTTPS
 * Ketik alamat lengkap beserta skema protokolnya (contoh: `http://laravelapp.test`).
 * Jika browser tetap memaksa mengarahkan ke HTTPS, gunakan mode Penyamaran (**Incognito Window**) untuk menghindari cache HSTS browser Anda.
