@@ -98,7 +98,37 @@ Agar ServeProxy dapat memerintahkan Nginx memuat ulang peta port secara otomatis
 sudo chmod u+s /usr/sbin/nginx
 ```
 
-### 5. Instalasi Multi-Version PHP (Opsional)
+### 5. Auto Reload Nginx Saat Map Berubah (Opsional)
+Agar Nginx otomatis reload setiap kali file `/etc/nginx/tui_ports.map` berubah (tanpa perlu `chmod u+s` atau sudo), gunakan **systemd path units**:
+
+```bash
+sudo tee /etc/systemd/system/nginx-reload.path > /dev/null << 'EOF'
+[Unit]
+Description=Watch nginx tui_ports.map for changes
+
+[Path]
+PathModified=/etc/nginx/tui_ports.map
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo tee /etc/systemd/system/nginx-reload.service > /dev/null << 'EOF'
+[Unit]
+Description=Reload nginx after tui_ports.map change
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nginx -s reload
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now nginx-reload.path
+```
+
+Setelah itu, setiap ada perubahan isi file `/etc/nginx/tui_ports.map`, Nginx akan otomatis reload dalam beberapa detik.
+
+### 6. Instalasi Multi-Version PHP (Opsional)
 Untuk menggunakan fitur multi PHP version per project, Anda perlu menginstal beberapa versi PHP ke path yang berbeda. php.new menyediakan beberapa versi PHP dari CDN mereka:
 
 ```bash
